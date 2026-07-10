@@ -1,8 +1,8 @@
 # YeetLaunch powered by YeetAMM
 ## Production Whitepaper
 
-**Version:** 1.4  
-**Date:** 2026-07-08  
+**Version:** 1.4 (rev. 2026-07-10)  
+**Date:** 2026-07-10  
 **System:** Solana launchpad + AMM lifecycle stack  
 **Evidence Base:** April 2026 internal code review and adversarial QA, June 2026 adversarial QA review, on-chain math review, deterministic simulations, current native-stack source review, targeted protocol tests, and a July 2026 full-lifecycle execution against the deployed program bytecode (in-SVM through day-16 LP vesting) plus a live-devnet mint→graduation on the same deployed program
 
@@ -16,7 +16,7 @@ The system has two operating phases. In **DBC mode**, a token starts on a launch
 
 This lifecycle runs on YeetLaunch’s own stack: its own DBC logic inside YeetAMM, its own AG aggregator and indexer, and its own YeetAMM pools as the canonical launch and post-graduation venue. External venue adapters exist inside AG for comparison and future expansion, but the YeetLaunch launch lifecycle does not depend on a third-party DBC, third-party indexer, third-party aggregator, or third-party AMM pool.
 
-An internal code review and adversarial QA session in April 2026 identified and fixed fee-table and off-chain synchronization defects before release. After remediation, the protocol passed targeted on-chain and TypeScript verification, a **1,000-pool / 10,420-swap** readiness simulation with **0 mismatches, 0 invariant violations, and 0 stuck pools**, and adversarial QA re-verification with **87 Rust unit tests**, **302 Vitest checks**, and **13 adversarial QA evidence proofs** (including the key regression guard `qa_evidence_12_production_decay_risk_free_roundtrip_negative`) passing against the current repository state. In July 2026 the complete token lifecycle — mint → DBC → graduation → post-cliff LP vesting — was additionally executed end-to-end against the **deployed program bytecode**, with the day-16 vesting mark reached in an in-process Solana VM (the LP schedule is fixed in the program and cannot be reached in wall-clock time), and a **live-devnet** launch was carried through graduation on that same deployed program. This whitepaper describes the design, economics, safety model, lifecycle, and operational implications of that verified state.
+An internal code review and adversarial QA session in April 2026 identified and fixed fee-table and off-chain synchronization defects before release. After remediation, the protocol passed targeted on-chain and TypeScript verification, a **1,000-pool / 10,420-swap** readiness simulation with **0 mismatches, 0 invariant violations, and 0 stuck pools**, and adversarial QA re-verification with **86 Rust unit tests**, **302 Vitest checks**, and **13 adversarial QA evidence proofs** (including the key regression guard `qa_evidence_12_production_decay_risk_free_roundtrip_negative`) passing against the current repository state. In July 2026 the complete token lifecycle — mint → DBC → graduation → post-cliff LP vesting — was additionally executed end-to-end against the **deployed program bytecode**, with the day-16 vesting mark reached in an in-process Solana VM (the LP schedule is fixed in the program and cannot be reached in wall-clock time), and a **live-devnet** launch was carried through graduation on that same deployed program. This whitepaper describes the design, economics, safety model, lifecycle, and operational implications of that verified state.
 
 ---
 
@@ -465,7 +465,7 @@ The single purpose is to convert an instant, unavoidable dump into a bounded, ob
 
 ### 7.6.4 Verification
 
-The behavior is covered by dedicated Rust unit tests — `per_slot_sell_accumulator_blocks_same_slot_overflow`, `per_slot_sell_accumulator_resets_each_slot`, `per_slot_sell_accumulator_sums_multiple_sells_in_one_slot`, and the adaptive-cap recovery/depletion tests — in the 87-test readiness suite. The constants live in `programs/yeet-amm/src/state.rs` and are part of the reproducible, verifiable program build.
+The behavior is covered by dedicated Rust unit tests — `per_slot_sell_accumulator_blocks_same_slot_overflow`, `per_slot_sell_accumulator_resets_each_slot`, `per_slot_sell_accumulator_sums_multiple_sells_in_one_slot`, and the adaptive-cap recovery/depletion tests — in the 86-test readiness suite. The constants live in `programs/yeet-amm/src/state.rs` and are part of the reproducible, verifiable program build.
 
 ---
 
@@ -730,7 +730,7 @@ YeetLaunch was not evaluated with a single “all green” unit test badge. It w
 
 | Metric | Result |
 |---|---:|
-| Rust unit tests (incl. QA evidence suite) | 87 passed |
+| Rust unit tests (incl. QA evidence suite) | 86 passed |
 | Vitest / TypeScript tests | 302 passed |
 | Adversarial QA evidence proofs | 13 passed |
 | Pools simulated | 1,000 |
@@ -985,7 +985,7 @@ Its core advantages are not slogans. They are structural properties:
 - deterministic rounding rules,
 - explicit mode-based fee isolation,
 - retained LP fee that deepens liquidity,
-- and readiness results showing **0 mismatches**, **0 invariant violations**, **0 stuck pools**, **0 profitable round-trips**, **87 Rust tests**, and **302 Vitest checks** passing — plus a full-lifecycle execution against the deployed bytecode (through day-16 LP vesting) and a live-devnet mint-to-graduation.
+- and readiness results showing **0 mismatches**, **0 invariant violations**, **0 stuck pools**, **0 profitable round-trips**, **86 Rust tests**, and **302 Vitest checks** passing — plus a full-lifecycle execution against the deployed bytecode (through day-16 LP vesting) and a live-devnet mint-to-graduation.
 
 The system is designed to make economic behavior legible. That is valuable because launchpads do not fail only when code breaks. They fail when users can no longer tell whether the market structure is working as advertised. YeetLaunch addresses that directly.
 
@@ -1109,7 +1109,7 @@ The most important design change from the June review was architectural: **virtu
 
 ## 19.1 Internal source basis
 
-- `ag/MAINNET_READINESS_REPORT_2026-04-02.md`
+- `ag/MAINNET_READINESS_REPORT_2026-04-02.md` — archived internal record of the April 2026 readiness run (the 1,000-pool / 10,420-swap simulation reported in §11); retained internally, not checked into the current source tree. The reproducible-from-checkout evidence is the on-chain/TypeScript test suites and the backend readiness simulation listed below; the historical run's headline figures are reported as evidence of that dated review, not as a current-checkout artifact.
 - `ag/programs/yeet-amm/src/math.rs`
 - `ag/programs/yeet-amm/src/instructions/swap_base_in.rs`
 - `ag/programs/yeet-amm/src/instructions/swap_base_out.rs`
