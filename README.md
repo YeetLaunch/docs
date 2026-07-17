@@ -65,7 +65,7 @@ The result: a large holder cannot crater the floor in a single transaction; exit
 | **[Whitepaper (PDF, v1.4)](docs/YeetLaunch_Whitepaper_v1.4.pdf)** | The complete protocol design: DBC math, graduation, fee model, anti-dump, LP vesting, and assurance results. |
 | [Whitepaper (Markdown)](docs/YEETLAUNCH_POWERED_BY_YEETAMM_WHITEPAPER.md) | Same content, readable on GitHub. |
 | [YeetAMM Routing & Integration Guide](docs/YEETAMM_ROUTING_INTEGRATION.md) | For external aggregators/routers: program IDs, pool-state layout, the fee model, how to quote (API / on-chain simulation / executed trades), and how to respect the per-slot sell cap. |
-| [YeetAMM TypeScript SDK](yeet-amm-sdk/) | Thin client for wallets, bots, and trackers: PDA derivation, swap instruction builders, account/error decoding, decimal helpers, and a REST client. Turnkey buy/sell with automatic wSOL wrap/unwrap. |
+| [YeetAMM TypeScript SDK](https://github.com/YeetLaunch/yeet-amm-sdk) | Thin client for wallets, bots, and trackers: PDA derivation, swap instruction builders, account/error decoding, decimal helpers, and a REST client. Turnkey buy/sell with automatic wSOL wrap/unwrap. |
 
 ## At a glance
 
