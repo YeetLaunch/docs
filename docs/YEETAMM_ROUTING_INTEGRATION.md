@@ -2,13 +2,13 @@
 
 **Audience:** external aggregators / routers (e.g. Jupiter) and anyone building
 an off-chain quoter against YeetAMM pools.
-**Status:** v1 — 2026-07-08. Matches on-chain `programs/yeet-amm` and the
-reference off-chain quoter in `yeetlaunch/backend/src/services/yeetAmm.service.ts`.
+**Status:** v2 — 2026-07-17. Matches the on-chain `yeet-amm` program.
 
-> **Read this first — pricing is NOT pure constant-product.** YeetAMM pools
-> price against **real + virtual** reserves, and sells are **rate-limited**.
-> A naive `x*y=k` quote will be wrong (understated depth) and a naive sell
-> router will hit on-chain reverts. Both are fully specified below.
+> **Read this first — pricing is NOT pure constant-product, and sells are
+> rate-limited.** A naive `x*y=k` quote will misprice, and a naive sell router
+> will hit on-chain reverts. Quote through the YeetLaunch API/SDK or on-chain
+> simulation rather than replicating the pool's internal pricing (§4), and
+> respect the live sell allowance (§5).
 
 ---
 
@@ -19,8 +19,7 @@ reference off-chain quoter in `yeetlaunch/backend/src/services/yeetAmm.service.t
 | Mainnet | `yeetaecvxpd7DFzZAYTEYracRt1WYJ7DfMVjEeEt2Cp` |
 | Devnet  | `yeetMcJ7nBfMZiQV8ns4h5m3WeVekT1ySq27bMWWfio` |
 
-The two binaries differ **only** by `declare_id!` (two `cfg(feature="mainnet")`
-gates, both the id) — identical audited logic.
+The two binaries differ **only** by `declare_id!` — identical audited logic.
 
 A pool has two lifecycle modes on the same account:
 - **DBC** (`pool_mode = 0`) — bonding curve, pre-graduation.
@@ -52,7 +51,7 @@ gate reads on `data.length`. All integers little-endian.
 | 266 | `reserve_a` | u64 | **real** base reserve |
 | 274 | `reserve_b` | u64 | **real** quote reserve |
 | 282 | `fee_bps` | u16 | always `100` (1%) — enforced at init |
-| 284 | `creator_fee_share_bps` | u16 | **repurposed** → live adaptive sell-cap bps (see §5). NOT a fee. |
+| 284 | `creator_fee_share_bps` | u16 | repurposed internal field — **not** a fee; do not use for pricing |
 | 286 | `lp_supply` | u64 | |
 | 294 | `last_updated_slot` | u64 | |
 | 302 | `locked_lp_amount` | u64 | 30% permanent lock |
@@ -64,15 +63,15 @@ gate reads on `data.length`. All integers little-endian.
 | 374 | `vesting_end_slot` | u64 | |
 | 382 | `vesting_vault` | Pubkey | |
 | 414 | `is_initialized` | bool (1) | **skip pool if false** — partially set up |
-| 496 | `virtual_reserve_a` | u64 | base-side anchor (see §4) |
-| 504 | `virtual_reserve_b` | u64 | quote-side anchor (see §4) |
-| 512 | `slot_sell_window` | u64 | `(slot << 16) \| consumed_bps` (see §5) |
+| 496 | `virtual_reserve_a` | u64 | internal pricing state (base side) |
+| 504 | `virtual_reserve_b` | u64 | internal pricing state (quote side) |
+| 512 | `slot_sell_window` | u64 | per-slot sell accounting (see §5) |
 | 520 | `pool_mode` | u8 | 0 = DBC, 1 = AMM |
 | 521 | `grad_threshold` | u64 | graduation target on **real** `reserve_b` |
 | 529 | `grad_slot` | u64 | slot graduation fired (0 pre-grad) |
 | 537 | `quote_mint` | Pubkey | |
-| 569 | `launch_lp_supply` | u64 | LP frozen at graduation (bucket math) |
-| 577 | `last_sell_cap_update_slot` | u64 | bucket recovery bookkeeping |
+| 569 | `launch_lp_supply` | u64 | LP frozen at graduation |
+| 577 | `last_sell_cap_update_slot` | u64 | sell-cap bookkeeping |
 
 `is_initialized == false` ⇒ do not route; the pool is mid-setup.
 
@@ -81,126 +80,66 @@ gate reads on `data.length`. All integers little-endian.
 ## 3. Fee model (fee-on-input)
 
 Flat **1% (`fee_bps = 100`) taken from `amount_in`**, before the curve. Split
-by mode (bps of `amount_in`, informational — the router only needs the 1% total
-for pricing):
+by mode (informational — the router only needs the 1% total):
 
 | Mode | Total | Yeet | Creator | LP (stays in pool) |
 |------|------:|-----:|--------:|-------------------:|
 | DBC  | 100 | 70 | 30 | 0 |
 | AMM  | 100 | 50 | 30 | 20 |
 
-For quoting, only the total matters: `amount_after_fee = amount_in − floor(amount_in × 100 / 10000)`.
-
 ---
 
-## 4. Pricing — constant product over **effective** reserves
+## 4. Pricing
 
-Effective reserve on each side = **real + effective virtual**:
+YeetAMM pools are **not** pure constant-product: they price against the real
+reserves plus an internal virtual-reserve component, so a naive
+`reserve_out / reserve_in` (or `x*y=k` on the real reserves) will misprice.
+Rather than replicate the pool's internal pricing, quote through one of:
 
-```
-eff_in  = reserve_in  + eff_virtual_in
-eff_out = reserve_out + eff_virtual_out
-amount_after_fee = amount_in − floor(amount_in × fee_bps / 10000)
-amount_out = floor(amount_after_fee × eff_out / (eff_in + amount_after_fee))
-```
+- **Quote API (recommended).**
+  `GET https://api.yeetlaunch.io/quote?inputMint=&outputMint=&amount=&slippageBps=`
+  returns the server-computed `outputAmount`, `minOutputAmount`, and
+  `priceImpactPct` for an exact-in swap. Authoritative and always in sync with
+  on-chain behavior.
+- **On-chain simulation.** Build the swap instruction (use the SDK, §6) and
+  `simulateTransaction` to read the exact output — no local pricing model needed.
+- **Executed trades (price feeds / charts).** Every swap emits a `SwapEvent`
+  carrying `amount_in`/`amount_out` (and `price_q64`, a Q64.64 convenience). The
+  realized rate is exact and needs no pricing model.
 
-`amount_out` must never be `>= reserve_out` (real) — the program caps output at
-real reserves; treat a quote that would exceed the real out-reserve as
+Output is capped at the real out-side reserve; a fill that would exceed it is
 liquidity-limited.
 
-### 4.1 Effective virtual reserves (decay)
+---
 
-Virtual reserves are **preserved at graduation**, then **lazily decay** from
-100% of anchor to a **15% floor** over **54,000 slots** (~6h @ 400ms). Mirror
-exactly (`Pool::effective_virtual_reserves`, `decay_anchor`):
+## 5. Sell rate-limiting (routers must respect this)
 
-```
-eff_virtual(anchor, mode, grad_slot, current_slot):
-    if mode != AMM or grad_slot == 0:      return anchor          # DBC / pre-grad: full anchor
-    elapsed = max(0, current_slot - grad_slot)
-    floor   = anchor * 1500 / 10000                               # 15%
-    if elapsed >= 54000:                   return floor
-    return floor + (anchor - floor) * (54000 - elapsed) / 54000
-```
+Post-graduation (AMM mode), **sells are rate-limited per slot; buys are not.**
+A sell that exceeds the current allowance reverts on-chain with
+`AdaptiveSellCapExceeded` (custom error **6042 / 0x1789**), so a router that
+ignores it will build failing transactions.
 
-Consequences for routers:
-- **DBC & pre-grad:** use the full `virtual_reserve_a/b`.
-- **A buy that crosses graduation in one tx** prices its AMM leg at
-  `elapsed = 0` ⇒ **full anchor**, not zero. (Common integration bug: zeroing
-  virtuals post-DBC understates depth.)
-- **Post-grad quotes are slot-dependent.** Cache with the current slot; a stale
-  slot yields a stale price. Refresh per quote.
+**Read the live allowance rather than modeling it.** The per-mint trading
+snapshot exposes exactly what you need:
+
+`GET https://yeetlaunch.io/api/yeet-amm/pool/:mint` →
+- `trading.sellCapEnabled` — whether the cap is active,
+- `trading.maxSellBaseRaw` — max base units sellable **right now**,
+- `trading.perSlotRemainingBps` — remaining per-slot sell capacity.
+
+Guidance: size each sell leg within `maxSellBaseRaw`, split large exits across
+multiple slots, and re-read the allowance per quote. Buys have no cap.
 
 ---
 
-## 5. Sell rate-limiting (routers MUST model this)
+## 6. Tooling
 
-Sells are capped; buys are not. Two independent layers, both keyed on the
-**input-side real reserve** (`reserve_in`, i.e. the base reserve for a sell).
-Enforced only in **AMM mode**.
-
-`consumed_bps` for a sell = **ceil**(`amount_in × 10000 / reserve_in`).
-
-**Layer 1 — hard per-slot aggregate cap.** `slot_sell_window` packs
-`(slot << 16) | cumulative_consumed_bps`. All sells landing in the same slot
-serialize on the writable pool account and sum; if the running total would
-exceed **`PER_SLOT_SELL_CAP_BPS = 500` (5%)**, the whole tx reverts with
-`AdaptiveSellCapExceeded` (custom error **6042 / 0x1789**). Closes the
-multi-wallet same-slot bypass.
-
-**Layer 2 — decaying bucket.** `creator_fee_share_bps` (offset 284) holds the
-live cap, `[50, 500]` bps. Each sell subtracts its `consumed_bps`; it recovers
-**+50 bps every 32 slots** back up to 500. Floor 50 bps (0.5%) always
-available.
-
-**Router guidance:**
-- Read the live cap from **offset 284** (`min(cap, 500 − slot_consumed_so_far)`
-  is the max sellable this slot).
-- Size sell legs so `consumed_bps ≤ remaining capacity`; split large exits
-  across slots. A single sell over ~5% of the base reserve **cannot** execute
-  in one slot regardless of wallets.
-- Buys have **no** cap.
-
----
-
-## 6. Reference quoters
-
-```ts
-// BUY: quote in (mint_b), base out (mint_a). No sell cap.
-function quoteBuy(pool, amountInQuote, currentSlot) {
-  const evA = effVirtual(pool.virtualReserveA, pool.mode, pool.gradSlot, currentSlot);
-  const evB = effVirtual(pool.virtualReserveB, pool.mode, pool.gradSlot, currentSlot);
-  const afterFee = amountInQuote - (amountInQuote * 100n) / 10000n;
-  const effIn  = pool.reserveB + evB;
-  const effOut = pool.reserveA + evA;
-  let out = (afterFee * effOut) / (effIn + afterFee);
-  if (out >= pool.reserveA) out = pool.reserveA - 1n;   // real-reserve cap
-  return out;
-}
-
-// SELL: base in (mint_a), quote out (mint_b). Must respect the per-slot cap.
-function quoteSell(pool, amountInBase, currentSlot) {
-  if (pool.mode === 'AMM') {
-    const consumedBps = ceilDiv(amountInBase * 10000n, pool.reserveA);   // vs REAL base reserve
-    const slot = pool.slotSellWindow >> 16n;
-    const used = slot === BigInt(currentSlot) ? (pool.slotSellWindow & 0xFFFFn) : 0n;
-    if (used + consumedBps > 500n) return { revert: 'AdaptiveSellCapExceeded(6042)' };
-  }
-  const evA = effVirtual(pool.virtualReserveA, pool.mode, pool.gradSlot, currentSlot);
-  const evB = effVirtual(pool.virtualReserveB, pool.mode, pool.gradSlot, currentSlot);
-  const afterFee = amountInBase - (amountInBase * 100n) / 10000n;
-  const effIn  = pool.reserveA + evA;
-  const effOut = pool.reserveB + evB;
-  let out = (afterFee * effOut) / (effIn + afterFee);
-  if (out >= pool.reserveB) out = pool.reserveB - 1n;
-  return { out };
-}
-```
-
-Canonical implementation to diff against: `effectiveVirtualReservesAB`,
-`quoteExactIn`, `consume_adaptive_sell_capacity` in
-`yeetlaunch/backend/src/services/yeetAmm.service.ts` and
-`programs/yeet-amm/src/state.rs`.
+- **TypeScript SDK:** [`@yeetlaunch/yeet-amm-sdk`](../yeet-amm-sdk/) — program
+  IDs, PDA derivation, pool-account decoding, swap instruction builders, turnkey
+  buy/sell (automatic wSOL wrap/unwrap), error decoding, and a REST client for
+  quotes. Build swaps and quotes without reimplementing anything.
+- **Quote endpoint:** `https://api.yeetlaunch.io` (see §4).
+- **Developer page:** <https://yeetlaunch.io/dev>
 
 ---
 
@@ -211,17 +150,15 @@ Canonical implementation to diff against: `effectiveVirtualReservesAB`,
 - **Atomic:** no migration window; the crossing tx already reflects AMM state.
 - **LP lock:** 30% permanently locked, 70% creator-vesting (48h cliff, then
   5%/day to day 16). LP cannot be pulled during the cliff — relevant if you
-  model rug risk. Locked/vesting LP is **not** in the tradable reserves; price
-  is set by `reserve_a/b` + effective virtuals only.
+  model rug risk. Locked/vesting LP is **not** part of the tradable reserves;
+  quote via the API/SDK (§4), not from reserves alone.
 
 ---
 
 ## 8. Integration checklist
 
 - [ ] Skip pools with `is_initialized == false`.
-- [ ] Use `reserve_a/b` (real) **plus** effective virtual reserves — never pure CPMM.
-- [ ] Recompute effective virtuals against **current slot** every quote (post-grad decay).
-- [ ] For a buy crossing graduation, price the AMM leg with **full** anchor virtuals.
-- [ ] Model the 5%/slot sell cap; split large sells across slots; buys uncapped.
-- [ ] Cap output at real out-reserve.
-- [ ] Fee is 1% on input; don't double-count the mode split.
+- [ ] Don't price naively from reserves — quote via the API, on-chain simulation, or the SDK (§4).
+- [ ] Respect the per-slot sell cap: read the live allowance and split large sells; buys are uncapped (§5).
+- [ ] Fee is 1% on input; the mode split is informational.
+- [ ] Verify canonical pools by PDA (`["yeet_amm_pool", mint_a, mint_b]`, sorted) + program owner + wSOL `quote_mint`.
