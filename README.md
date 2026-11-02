@@ -7,7 +7,7 @@
 Native dynamic bonding curve · native AMM · native aggregator & indexer · fixed-fee execution · vesting-backed post-graduation liquidity
 
 [![Create a token](https://img.shields.io/badge/Create_a_token-39FF14?style=for-the-badge)](https://yeetlaunch.io/token-creator)
-[![Whitepaper](https://img.shields.io/badge/Whitepaper-v1.7.2-39FF14?style=for-the-badge)](https://yeetlaunch.io/YeetLaunch_Whitepaper_v1.7.2.pdf)
+[![Whitepaper](https://img.shields.io/badge/Whitepaper-v1.7.2-39FF14?style=for-the-badge)](docs/YeetLaunch_Whitepaper_v1.7.2.pdf)
 [![Chain](https://img.shields.io/badge/Solana-mainnet%20%2F%20devnet-14F195?style=for-the-badge)](https://solana.com)
 [![Fee](https://img.shields.io/badge/Swap%20fee-1.00%25%20flat-blue?style=for-the-badge)](#fees)
 
@@ -64,9 +64,9 @@ These limits do not create a SOL floor or stop a market dump: the cap is per slo
 | Document | Description |
 |----------|-------------|
 | **[Launch from your site](docs/LAUNCH_FROM_YOUR_SITE.md)** | Signing links: let people launch a token on YeetLaunch from your site, approving in their own wallet. |
-| **[Whitepaper (PDF, v1.7.2)](https://yeetlaunch.io/YeetLaunch_Whitepaper_v1.7.2.pdf)** | The current protocol design: DBC math, graduation, fee model, anti-dump, LP vesting, and assurance results. |
-| [Whitepaper v1.4 (PDF)](docs/YeetLaunch_Whitepaper_v1.4.pdf) · [Markdown](docs/YEETLAUNCH_POWERED_BY_YEETAMM_WHITEPAPER.md) | Archived July 2026 edition. Superseded: it describes virtual-reserve decay (removed August 2026), the 32 SOL threshold and the old vesting schedule. |
-| [YeetAMM Routing & Integration Guide](docs/YEETAMM_ROUTING_INTEGRATION.md) | For external aggregators/routers: program IDs, pool-state layout, the fee model, how to quote (API / on-chain simulation / executed trades), and how to respect the per-slot sell cap. |
+| **[Whitepaper (PDF, v1.7.2)](docs/YeetLaunch_Whitepaper_v1.7.2.pdf)** | The current protocol design: DBC math, graduation, fee model, anti-dump, LP vesting, what the design does not protect against, and assurance results. |
+| [Whitepaper (Markdown)](docs/YEETLAUNCH_POWERED_BY_YEETAMM_WHITEPAPER.md) | Same content, readable on GitHub. |
+| [YeetAMM Routing & Integration Guide](docs/YEETAMM_ROUTING_INTEGRATION.md) | For external aggregators/routers: program IDs, pool-state layout, which side is SOL, the fee model, how to quote (API / on-chain simulation / executed trades), and how to respect the per-slot sell cap. |
 | [YeetAMM TypeScript SDK](https://github.com/YeetLaunch/yeet-amm-sdk) | Thin client for wallets, bots, and trackers: PDA derivation, swap instruction builders, account/error decoding, decimal helpers, and a REST client. Turnkey buy/sell with automatic wSOL wrap/unwrap. |
 
 ## At a glance
